@@ -108,3 +108,53 @@ class GridEnvironment:
             if success:
                 return True
         return False
+    
+    def get_observation(self, agent_idx: int, view_size: int = 11) -> np.ndarray:
+        assert view_size % 2 == 1, "view_size doit être impair pour un centrage propre"
+        
+        n_channels = 5
+        obs = np.zeros((n_channels, view_size, view_size), dtype=np.float32)
+        
+        agent_pos = self.starts[agent_idx]
+        agent_goal = self.goals[agent_idx]
+        half = view_size // 2
+        ar, ac = agent_pos
+        
+        top, left = ar - half, ac - half
+        
+        obs[0, :, :] = 1.0
+        
+        g_top = max(0, top)
+        g_left = max(0, left)
+        g_bot = min(self.height, top + view_size)
+        g_right = min(self.width, left + view_size)
+        
+        v_top = g_top - top
+        v_left = g_left - left
+        v_bot = v_top + (g_bot - g_top)
+        v_right = v_left + (g_right - g_left)
+        
+        obs[0, v_top:v_bot, v_left:v_right] = self.grid[g_top:g_bot, g_left:g_right]
+        
+        # --- Canaux 1 et 2 : autres agents et leurs cibles ---
+        for i, (pos, goal) in enumerate(zip(self.starts, self.goals)):
+            if i == agent_idx:
+                continue
+            vr, vc = pos[0] - top, pos[1] - left
+            if 0 <= vr < view_size and 0 <= vc < view_size:
+                obs[1, vr, vc] = 1.0
+            vr, vc = goal[0] - top, goal[1] - left
+            if 0 <= vr < view_size and 0 <= vc < view_size:
+                obs[2, vr, vc] = 1.0
+        
+        vr, vc = agent_goal[0] - top, agent_goal[1] - left
+        if 0 <= vr < view_size and 0 <= vc < view_size:
+            obs[3, vr, vc] = 1.0
+        
+        dr = agent_goal[0] - ar
+        dc = agent_goal[1] - ac
+        norm = np.sqrt(dr * dr + dc * dc)
+        if norm > 0:
+            obs[4, :, :] = dr / norm  # composante verticale
+        
+        return obs
